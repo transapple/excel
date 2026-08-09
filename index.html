@@ -947,21 +947,6 @@
     box-shadow:0 8px 20px rgba(227,167,48,0.35);
   }
   #installGate .gate-btn:disabled{ opacity:.6; cursor:default; }
-  #installGate .gate-steps{
-    display:none;
-    text-align:left;
-    background:rgba(255,255,255,0.08);
-    border-radius:16px;
-    padding:16px 18px;
-    max-width:320px;
-  }
-  #installGate .gate-steps.gate-steps-visible{ display:block; }
-  #installGate .gate-steps li{
-    font-family:'Inter', sans-serif;
-    font-size:13.5px;
-    line-height:1.6;
-    color:rgba(255,255,255,0.9);
-  }
   #installGate .gate-powered{
     position:absolute;
     bottom:calc(18px + var(--safe-bottom));
@@ -1528,8 +1513,7 @@
   </div>
   <h2>Excel Examination Services</h2>
   <p id="gateMessage">Install the app to continue. This app is only available as an installed app on your device.</p>
-  <button class="gate-btn" id="gateInstallBtn" disabled>Preparing install…</button>
-  <ol class="gate-steps" id="gateSteps"></ol>
+  <button class="gate-btn" id="gateInstallBtn">Install App</button>
   <div class="gate-powered">Powered by TransApple Technologies</div>
 </div>
 
@@ -1547,17 +1531,14 @@
   var installGate   = document.getElementById('installGate');
   var gateBtn        = document.getElementById('gateInstallBtn');
   var gateMessage     = document.getElementById('gateMessage');
-  var gateSteps       = document.getElementById('gateSteps');
   var splash          = document.getElementById('splashScreen');
   var deferredPrompt  = null;
+  var installRequested = false; // true once the user has tapped Install App
 
   function isStandalone(){
     return window.matchMedia('(display-mode: standalone)').matches ||
            window.navigator.standalone === true; // iOS Safari
   }
-
-  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  var isAndroid = /Android/.test(navigator.userAgent);
 
   function runSplash(){
     splash.classList.remove('splash-hidden');
@@ -1565,6 +1546,20 @@
       splash.classList.add('splash-hidden');
       setTimeout(function(){ splash.remove(); }, 550);
     }, 3500);
+  }
+
+  // Fires the native install prompt (download + install + add to home
+  // screen). Nothing else is shown — just this one screen and this button.
+  function triggerInstall(){
+    if (!deferredPrompt) return;
+    var promptEvent = deferredPrompt;
+    deferredPrompt = null;
+    promptEvent.prompt();
+    promptEvent.userChoice.then(function(choice){
+      if (choice.outcome !== 'accepted') {
+        installRequested = false;
+      }
+    });
   }
 
   if (isStandalone()) {
@@ -1579,64 +1574,25 @@
     window.addEventListener('beforeinstallprompt', function(e){
       e.preventDefault();
       deferredPrompt = e;
-      gateBtn.disabled = false;
-      gateBtn.textContent = 'Install App';
+      // If the user already tapped Install before the browser was ready
+      // to prompt, fire it immediately now instead of waiting on another tap.
+      if (installRequested) triggerInstall();
     });
 
     gateBtn.addEventListener('click', function(){
-      if (deferredPrompt) {
-        gateBtn.disabled = true;
-        gateBtn.textContent = 'Installing…';
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(function(choice){
-          if (choice.outcome === 'accepted') {
-            gateMessage.textContent = 'Installed! Launching the app…';
-          } else {
-            deferredPrompt = null;
-            gateBtn.disabled = false;
-            gateBtn.textContent = 'Install App';
-          }
-        });
-      }
+      installRequested = true;
+      triggerInstall();
     });
 
     window.addEventListener('appinstalled', function(){
       // Once installed, reload so the browser relaunches it in standalone
       // mode (or the user opens it fresh from the home screen icon).
-      gateMessage.textContent = 'Installed! Open the app from your home screen.';
-      gateBtn.style.display = 'none';
-      setTimeout(function(){ window.location.reload(); }, 1200);
+      window.location.reload();
     });
-
-    if (isIOS) {
-      gateBtn.style.display = 'none';
-      gateMessage.textContent = 'Install this app on your iPhone or iPad to continue:';
-      gateSteps.innerHTML =
-        '<li>Tap the <strong>Share</strong> icon in Safari’s toolbar</li>' +
-        '<li>Scroll down and tap <strong>“Add to Home Screen”</strong></li>' +
-        '<li>Tap <strong>Add</strong>, then open the app from your home screen</li>';
-      gateSteps.classList.add('gate-steps-visible');
-    } else {
-      // Give Chrome/Edge/Android a moment to fire beforeinstallprompt.
-      // If it never fires (unsupported browser, or already dismissed
-      // too many times), fall back to manual instructions.
-      setTimeout(function(){
-        if (!deferredPrompt) {
-          gateBtn.style.display = 'none';
-          gateMessage.textContent = 'To install, open this page in Chrome or Edge, then use the browser menu and choose “Install app” / “Add to Home screen”.';
-          if (isAndroid) {
-            gateSteps.innerHTML =
-              '<li>Tap the <strong>⋮</strong> menu in your browser</li>' +
-              '<li>Tap <strong>“Install app”</strong> or <strong>“Add to Home screen”</strong></li>' +
-              '<li>Confirm, then open the app from your home screen</li>';
-            gateSteps.classList.add('gate-steps-visible');
-          }
-        }
-      }, 2500);
-    }
   }
 })();
 </script>
+
 
 <div class="app-shell" id="appShell">
 
