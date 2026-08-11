@@ -1774,7 +1774,25 @@
       </div>
 
       <div class="subject-grid" id="levelSubjectTabs" style="margin-top:12px;"></div>
-      <div class="cat-grid" id="levelResultsGrid" style="margin-top:14px;"></div>
+    </section>
+
+    <!-- ---------- LEVEL POSTS VIEW (opened when a subject tab is tapped in
+         Browse by class level — shows only that subject's materials, on
+         its own screen, never mixed with the tabs) ---------- -->
+    <section class="view" id="view-levelposts">
+      <div class="section" style="padding-top:18px; padding-bottom:0;">
+        <div class="results-head">
+          <button class="results-back" onclick="goTo('level')" aria-label="Back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+          </button>
+          <div>
+            <h2 class="results-title" id="levelPostsTitle">Subject</h2>
+            <p class="results-subtitle" id="levelPostsSubtitle"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="cat-grid" id="levelPostsGrid" style="margin-top:14px;"></div>
     </section>
 
     <!-- ---------- FORMAT VIEW (independent per-material-type section — its own
@@ -1794,7 +1812,25 @@
       </div>
 
       <div class="subject-grid" id="formatSubjectTabs" style="margin-top:2px;"></div>
-      <div class="cat-grid" id="formatResultsGrid" style="margin-top:14px;"></div>
+    </section>
+
+    <!-- ---------- FORMAT POSTS VIEW (opened when a subject tab is tapped in
+         Browse by type — shows only that subject's materials within this
+         format, on its own screen, never mixed with the tabs) ---------- -->
+    <section class="view" id="view-formatposts">
+      <div class="section" style="padding-top:18px; padding-bottom:0;">
+        <div class="results-head">
+          <button class="results-back" onclick="goTo('format')" aria-label="Back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+          </button>
+          <div>
+            <h2 class="results-title" id="formatPostsTitle">Subject</h2>
+            <p class="results-subtitle" id="formatPostsSubtitle"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="cat-grid" id="formatPostsGrid" style="margin-top:14px;"></div>
     </section>
 
     <!-- ---------- POPULAR THIS WEEK VIEW ("See all" from the home page — every
@@ -3230,7 +3266,7 @@ function cardHTML(item, opts = {}){
     </div>
     <div class="card-actions">
       <button class="fav-btn ${isFav ? 'active' : ''}" aria-label="Toggle favorite" onclick="toggleFavorite('${item.id}', event)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7.5-4.6-10-9.1C.5 8.4 2.3 5 5.8 5c2 0 3.5 1.1 4.2 2.5C10.7 6.1 12.2 5 14.2 5c3.5 0 5.3 3.4 3.8 6.9C19.5 16.4 12 21 12 21z"></path></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
       </button>
       <button class="add-btn ${inCart ? 'added' : ''}" onclick="toggleCart('${item.id}', event)">
         ${inCart ? qty : '+'}
@@ -3314,7 +3350,7 @@ function renderCardOptionsList(){
       <span>${inCart ? 'Remove from cart' : 'Add to cart'}</span>
     </button>
     <button class="sheet-option" onclick="cardOptionToggleFavorite()">
-      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7.5-4.6-10-9.1C.5 8.4 2.3 5 5.8 5c2 0 3.5 1.1 4.2 2.5C10.7 6.1 12.2 5 14.2 5c3.5 0 5.3 3.4 3.8 6.9C19.5 16.4 12 21 12 21z"></path></svg></span>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span>
       <span>${isFav ? 'Remove from favorites' : 'Add to favorites'}</span>
     </button>
     <button class="sheet-option" onclick="cardOptionViewDetails()">
@@ -3542,15 +3578,47 @@ function isExcelPaper(item){
 
 function filterByFormat(type){
   state.formatType = type;
-  state.formatSubject = 'all';
-  renderFormatView();
+  renderFormatTabs();
   goTo('format');
 }
 
-function setFormatSubject(subj){
-  state.formatSubject = (state.formatSubject === subj) ? 'all' : subj; // tap again to clear
-  renderFormatView();
+/* Renders the tabs-only screen for Browse by type — no materials grid
+   here, just the subject tiles scoped to this format. */
+function renderFormatTabs(){
+  const type = state.formatType;
+  const t = TYPE_DASHBOARD.find(x => x.id === type);
+  const allItems = CATALOG.filter(c => (c.formats||[]).includes(type));
+
+  document.getElementById('formatTitle').textContent = t ? t.name : type;
+  document.getElementById('formatSubtitle').textContent = `${allItems.length} item${allItems.length===1?'':'s'}`;
+  document.getElementById('formatSubjectTabs').innerHTML = subjectTabsHTML(allItems, null, 'openFormatSubject');
+}
+
+/* Opens the dedicated posts screen for one subject within the current
+   format — materials only ever appear here, never mixed with the tabs. */
+function openFormatSubject(subj){
+  state.formatSubject = subj;
+  renderFormatPosts();
+  goTo('formatposts');
   if(window.ExcelBackend) window.ExcelBackend.logEvent('format_subject', state.formatType + ':' + subj);
+}
+
+function renderFormatPosts(){
+  const type = state.formatType;
+  const t = TYPE_DASHBOARD.find(x => x.id === type);
+  const allItems = CATALOG.filter(c => (c.formats||[]).includes(type));
+  const items = allItems.filter(c => (c.subjects||[]).includes(state.formatSubject));
+  const subj = SUBJECT_DASHBOARD.find(d => d.id === state.formatSubject);
+
+  document.getElementById('formatPostsTitle').textContent = subj ? subj.name : state.formatSubject;
+  document.getElementById('formatPostsSubtitle').textContent =
+    `${items.length} item${items.length===1?'':'s'}` + (t ? ` · ${t.name}` : '');
+  document.getElementById('formatPostsGrid').innerHTML = items.length
+    ? items.map(item => cardHTML(item)).join('')
+    : `<div class="empty-state">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
+        <h3>No materials yet</h3><p>Nothing in this format yet — check back soon.</p>
+      </div>`;
 }
 
 /* ---------- Popular this week (home "See all") — every featured item
@@ -3619,23 +3687,8 @@ function renderPopularView(){
 }
 
 function renderFormatView(){
-  const type = state.formatType;
-  const t = TYPE_DASHBOARD.find(x => x.id === type);
-  const allItems = CATALOG.filter(c => (c.formats||[]).includes(type));
-  const items = state.formatSubject === 'all'
-    ? allItems
-    : allItems.filter(c => (c.subjects||[]).includes(state.formatSubject));
-
-  document.getElementById('formatTitle').textContent = t ? t.name : type;
-  document.getElementById('formatSubtitle').textContent =
-    `${items.length} item${items.length===1?'':'s'}` + (state.formatSubject==='all' ? ' · all subjects' : ' · ' + state.formatSubject);
-  document.getElementById('formatSubjectTabs').innerHTML = subjectTabsHTML(allItems, state.formatSubject, 'setFormatSubject');
-  document.getElementById('formatResultsGrid').innerHTML = items.length
-    ? items.map(item => cardHTML(item)).join('')
-    : `<div class="empty-state">
-        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
-        <h3>No materials yet</h3><p>Nothing in this format yet — check back soon.</p>
-      </div>`;
+  // Superseded by renderFormatTabs() + renderFormatPosts() — the format
+  // screen now only ever shows tabs, and posts live on their own screen.
 }
 
 /* Which catalog items are actually available for the current exam-level
@@ -3847,7 +3900,7 @@ function renderFavoritesList(){
   }
   if(!items.length){
     wrap.innerHTML = `<div class="empty-state">
-      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21s-7.5-4.6-10-9.1C.5 8.4 2.3 5 5.8 5c2 0 3.5 1.1 4.2 2.5C10.7 6.1 12.2 5 14.2 5c3.5 0 5.3 3.4 3.8 6.9C19.5 16.4 12 21 12 21z"></path></svg>
+      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
       <h3>No favorites yet</h3><p>Tap the heart on any material to save it here.</p>
     </div>`;
     return;
@@ -4046,7 +4099,7 @@ function goToExam(examId){
   document.getElementById('levelTitle').textContent = exam.name;
   document.getElementById('levelSubtitle').textContent = `${exam.full} · ${exam.classes[0]} – ${exam.classes[exam.classes.length-1]}`;
   renderLevelFilters();
-  renderLevelResults();
+  renderLevelTabs();
   goTo('level');
   if(window.ExcelBackend) window.ExcelBackend.logEvent('exam_level', examId);
 }
@@ -4063,15 +4116,17 @@ function renderLevelFilters(){
 /* Subject tabs scoped to just this exam level's own subject list (in that
    level's own order) — unlike subjectTabsHTML (used elsewhere) which always
    shows all subjects across every level, this only ever shows PLE's 4
-   subjects on the PLE screen, UCE's 19 on the UCE screen, etc. */
-function levelSubjectTabsHTML(items, activeId, examId){
+   subjects on the PLE screen, UCE's 19 on the UCE screen, etc. Tapping a
+   tile always navigates to the level-posts screen — this screen itself
+   never shows materials, only the tabs. */
+function levelSubjectTabsHTML(items, examId){
   const counts = {};
   items.forEach(it => (it.subjects||[]).forEach(s => { counts[s] = (counts[s]||0) + 1; }));
   const scopedIds = subjectsForExam(examId);
   return scopedIds.map((id, i) => {
     const s = SUBJECT_DASHBOARD.find(d => d.id === id) || { id, name:id, icon:'book', grad:['#16215C','#3A4EA8'] };
     return `
-    <div class="subject-tile${activeId===s.id ? ' active' : ''}" style="--tile-a:${s.grad[0]}; --tile-b:${s.grad[1]}; animation-delay:${i*30}ms;" onclick="setLevelSubject('${s.id.replace(/'/g,"\\'")}')">
+    <div class="subject-tile" style="--tile-a:${s.grad[0]}; --tile-b:${s.grad[1]}; animation-delay:${i*30}ms;" onclick="openLevelSubject('${s.id.replace(/'/g,"\\'")}')">
       <div class="ic">${s.text ? `<span class="txt">${s.text}</span>` : iconSvg(s.icon)}</div>
       <p class="nm">${s.name}</p>
       <p class="cnt">${counts[s.id] || 0}</p>
@@ -4079,16 +4134,34 @@ function levelSubjectTabsHTML(items, activeId, examId){
   }).join('');
 }
 
-function renderLevelResults(){
+/* Renders the tabs-only screen for Browse by class level — no materials
+   grid here, just the subject tiles scoped to the chosen exam/class. */
+function renderLevelTabs(){
   const examId = state.levelExam;
   const scopedClasses = state.levelClass !== 'all' ? [state.levelClass] : classesForExam(examId);
   const classItems = CATALOG.filter(item => item.classes.some(c => scopedClasses.includes(c)));
-  const items = state.levelSubject === 'all'
-    ? classItems
-    : classItems.filter(item => item.subjects.includes(state.levelSubject));
+  document.getElementById('levelSubjectTabs').innerHTML = levelSubjectTabsHTML(classItems, examId);
+}
 
-  document.getElementById('levelSubjectTabs').innerHTML = levelSubjectTabsHTML(classItems, state.levelSubject, examId);
-  document.getElementById('levelResultsGrid').innerHTML = items.length
+/* Opens the dedicated posts screen for one subject within the current
+   exam level — materials only ever appear here, never mixed with the tabs. */
+function openLevelSubject(subj){
+  state.levelSubject = subj;
+  renderLevelPosts();
+  goTo('levelposts');
+  if(window.ExcelBackend) window.ExcelBackend.logEvent('subject', subj);
+}
+
+function renderLevelPosts(){
+  const examId = state.levelExam;
+  const scopedClasses = state.levelClass !== 'all' ? [state.levelClass] : classesForExam(examId);
+  const classItems = CATALOG.filter(item => item.classes.some(c => scopedClasses.includes(c)));
+  const items = classItems.filter(item => item.subjects.includes(state.levelSubject));
+  const subj = SUBJECT_DASHBOARD.find(d => d.id === state.levelSubject);
+
+  document.getElementById('levelPostsTitle').textContent = subj ? subj.name : state.levelSubject;
+  document.getElementById('levelPostsSubtitle').textContent = `${items.length} item${items.length===1?'':'s'}`;
+  document.getElementById('levelPostsGrid').innerHTML = items.length
     ? items.map(item => cardHTML(item)).join('')
     : `<div class="empty-state">
         <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
@@ -4098,14 +4171,8 @@ function renderLevelResults(){
 
 function setLevelClass(cls){
   state.levelClass = cls;
-  renderLevelResults();
+  renderLevelTabs();
   if(window.ExcelBackend) window.ExcelBackend.logEvent('class', cls);
-}
-
-function setLevelSubject(subj){
-  state.levelSubject = (state.levelSubject === subj) ? 'all' : subj; // tap again to clear
-  renderLevelResults();
-  if(window.ExcelBackend) window.ExcelBackend.logEvent('subject', subj);
 }
 
 /* ---------- Past Papers (browse by examination board, then year) ---------- */
