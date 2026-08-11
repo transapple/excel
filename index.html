@@ -432,6 +432,15 @@
     font-weight:700; cursor:pointer;
   }
   .preview-gallery img{ cursor:pointer; }
+  /* No-download protection: applied to any material content image (gallery
+     thumbnails + fullscreen lightbox). Blocks the iOS "save image" long-press
+     menu and desktop drag-to-save/right-click-save; this is a deterrent, not
+     an absolute technical guarantee since a determined user with devtools
+     can still get at any image a browser has rendered. */
+  .no-dl{
+    -webkit-touch-callout:none; -webkit-user-select:none; -moz-user-select:none;
+    user-select:none; -webkit-user-drag:none; user-drag:none;
+  }
 
   /* ---------- Notification bell + inbox ---------- */
   .bell-dot.hidden{ display:none !important; }
@@ -1743,18 +1752,6 @@
       </div>
       <div class="type-grid" id="typeGrid"></div>
 
-      <div class="section"><div class="section-head"><h2>Who are you?</h2></div></div>
-      <div class="people-strip">
-        <div class="people-card">
-          <p class="k">For teachers</p>
-          <p>Enhance your teaching and save time with reliable, ready-made academic resources.</p>
-        </div>
-        <div class="people-card alt" onclick="openFacilitationModal()" style="cursor:pointer;">
-          <p class="k">For learners</p>
-          <p>Prepare with confidence, understand better and achieve outstanding results.</p>
-          <p style="margin-top:8px; font-weight:700; text-decoration:underline; text-underline-offset:2px;">How to use these materials →</p>
-        </div>
-      </div>
       <div style="height:6px;"></div>
     </section>
 
@@ -2750,7 +2747,7 @@ function closeItemModal(){
 function previewHTML(item){
   if(item.previewType === 'image' && item.previewImages && item.previewImages.length){
     return `<div class="preview-gallery">${
-      item.previewImages.map((src, i) => `<img src="${src}" alt="${item.name} preview" loading="lazy" onclick="openLightboxImages(${JSON.stringify(item.previewImages).replace(/"/g,'"')}, ${i}, '${item.name.replace(/'/g, "\\'")}')">`).join('')
+      item.previewImages.map((src, i) => `<img class="no-dl" src="${src}" alt="${item.name} preview" loading="lazy" draggable="false" oncontextmenu="return false;" onclick="openLightboxImages(${JSON.stringify(item.previewImages).replace(/"/g,'"')}, ${i}, '${item.name.replace(/'/g, "\\'")}')">`).join('')
     }</div>`;
   }
 
@@ -2771,9 +2768,14 @@ function previewHTML(item){
   }
 
   if(item.previewType === 'pdf' && item.previewSrc){
+    // Routed through Google's public document viewer rather than the raw
+    // file — the browser's own PDF renderer always shows a native download
+    // button in its toolbar that we can't remove, but the gview embed has
+    // no such control, so this keeps the file view-only inside the app.
     const fname = item.previewName || 'Document.pdf';
+    const viewerSrc = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(item.previewSrc)}`;
     return `
-      <iframe class="preview-pdf-frame" src="${item.previewSrc}" title="${fname}" loading="lazy"></iframe>
+      <iframe class="preview-pdf-frame" src="${viewerSrc}" title="${fname}" loading="lazy"></iframe>
       <button class="preview-fullscreen-btn" onclick="openLightboxPdf('${item.previewSrc}', '${fname.replace(/'/g, "\\'")}')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"></path></svg>
         View full screen
@@ -2832,8 +2834,11 @@ let lightboxImages = [];
 let lightboxIndex = 0;
 
 function openLightboxPdf(src, name){
+  // Same reasoning as the inline preview above: gview instead of the raw
+  // file so there's no native browser download button in the fullscreen view.
+  const viewerSrc = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(src)}`;
   document.getElementById('lightboxTitle').textContent = name;
-  document.getElementById('lightboxBody').innerHTML = `<iframe src="${src}" title="${name}"></iframe>`;
+  document.getElementById('lightboxBody').innerHTML = `<iframe src="${viewerSrc}" title="${name}"></iframe>`;
   document.getElementById('lightboxOverlay').classList.add('show');
   pushOverlayHistory('lightbox');
 }
@@ -2858,7 +2863,7 @@ function openLightboxImages(images, index, name){
 function renderLightboxImage(){
   const showNav = lightboxImages.length > 1;
   document.getElementById('lightboxBody').innerHTML = `
-    <div class="lb-img-wrap"><img src="${lightboxImages[lightboxIndex]}" alt=""></div>
+    <div class="lb-img-wrap"><img class="no-dl" src="${lightboxImages[lightboxIndex]}" alt="" draggable="false" oncontextmenu="return false;"></div>
     ${showNav ? `
       <div class="lightbox-nav prev" onclick="lightboxStep(-1)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></div>
       <div class="lightbox-nav next" onclick="lightboxStep(1)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></div>
@@ -3245,7 +3250,7 @@ function toggleFavorite(itemId, event){
   renderCatalog();
   renderHomeFeatured();
   if(state.tab === 'cart') renderCart();
-  showToast(state.favorites[itemId] ? 'Added to favorites ♥' : 'Removed from favorites');
+  showToast(state.favorites[itemId] ? 'Added to favorites ❤️' : 'Removed from favorites');
 }
 
 const HOME_FEATURED_MAX = 4; // "Popular this week" only ever shows this many — the rest is reachable via "See all"
@@ -3409,7 +3414,7 @@ const SUBJECT_DASHBOARD = [
   { id:'IRE',                    name:'IRE',          icon:'faith',      grad:['#0E4A6E','#4BB4E6'] },
   { id:'Kiswahili',              name:'Kiswahili',    icon:'bubble',     grad:['#7A1FA2','#C77EE8'] },
   { id:'Literature',             name:'Literature',   icon:'feather',    grad:['#5B3B96','#8A6FD6'] },
-  { id:'Social Science',         name:'Soc. Science', icon:'group',      grad:['#0E4A6E','#3A8FBF'] },
+  { id:'Social Science',         name:'SST',           icon:'group',      grad:['#0E4A6E','#3A8FBF'] },
   { id:'Art Papers',             name:'Art Papers',   icon:'palette',    grad:['#B3241F','#E88A6E'] },
   { id:'Entrepreneurship',       name:'Entrep.',      icon:'briefcase',  grad:['#7A4A12','#C77E3D'] },
   { id:'Physical Education',     name:'P.E.',         icon:'trophy',     grad:['#0E7A5F','#3ADB9E'] },
@@ -4691,7 +4696,7 @@ const FAQS = [
   { q: "What kind of materials will I find in the app?", a: "Summarized notes, topical question banks, UNEB past papers with marking guides, and full mock/pre-mock exam sets, organised by subject and level in the Catalog." },
   { q: "How do I buy an item?", a: "Open the item in the Catalog, tap Add to Cart or Buy Now, then follow the checkout steps. Paid items unlock in your library once payment is confirmed." },
   { q: "What payment methods are accepted?", a: "Mobile Money (MTN and Airtel) is the primary payment method. If you run into any payment issue, message us on WhatsApp and we'll sort it out quickly." },
-  { q: "How do I receive my materials after paying?", a: "Confirmed purchases appear automatically under Cart → Purchase History, where you can open or download them any time." },
+  { q: "How do I receive my materials after paying?", a: "Confirmed purchases appear automatically under Cart → Purchase History, where you can view them any time inside the app." },
   { q: "Can I use materials without an internet connection?", a: "Once a paid item has fully opened at least once, cached pages stay viewable offline. A connection is needed the first time you open each item." },
   { q: "Are any materials free?", a: "Yes — items marked \"Free\" in the Catalog filters can be opened right away with no payment needed." },
   { q: "My payment didn't reflect — what do I do?", a: "Mobile Money confirmations can take a few minutes. If it still hasn't reflected after 15 minutes, message us on WhatsApp with your transaction ID and we'll confirm it manually." },
@@ -4960,7 +4965,7 @@ function closeNotificationsModal(){
    ========================================================================= */
 function shareApp(){
   const shareText = 'Check out Excel Examination Services for quality PLE, UCE & UACE revision materials and past papers!';
-  const shareUrl = 'https://www.appcreator24.com/app4113018-o0yzci';
+  const shareUrl = 'https://transapple.github.io/excel/';
   if(navigator.share){
     navigator.share({ title:'Excel Examination Services', text:shareText, url:shareUrl }).catch(()=>{});
   } else {
