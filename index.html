@@ -279,6 +279,35 @@
   .type-tile .nm{ font-family:'Sora'; font-size:11.5px; font-weight:800; color:var(--ink); margin:0; transition:color .2s ease; }
   .type-tile .cnt{ font-size:9px; color:var(--ink-soft); margin:0; }
 
+  /* ---------- Browse-by-subject dashboard (4-across tabs) ---------- */
+  .subject-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:4px 20px 8px; }
+  .subject-tile{
+    background:var(--white); border:1px solid var(--line); border-radius:14px;
+    padding:11px 4px; display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer;
+    transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease; text-align:center;
+    animation:tileIn .45s cubic-bezier(.34,1.56,.64,1) backwards;
+  }
+  .subject-tile:active{ transform:scale(.95); }
+  @media(hover:hover){
+    .subject-tile:hover{ border-color:var(--tile-a, var(--navy-700)); transform:translateY(-2px); box-shadow:0 8px 18px -12px var(--tile-a, rgba(10,19,56,.5)); }
+    .subject-tile:hover .ic{ transform:scale(1.1) rotate(-6deg); background-position:100% 50%; }
+    .subject-tile:hover .nm{ color:var(--tile-a, var(--ink)); }
+  }
+  .subject-tile .ic{
+    width:30px; height:30px; border-radius:9px; color:#fff;
+    background:linear-gradient(135deg, var(--tile-a, var(--navy-800)), var(--tile-b, var(--navy-700)));
+    background-size:180% 180%; background-position:0% 50%;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1), background-position .5s ease;
+  }
+  .subject-tile .ic svg{ width:15px; height:15px; }
+  .subject-tile .ic .txt{ font-family:'Sora'; font-size:10.5px; font-weight:800; letter-spacing:.01em; }
+  .subject-tile:active .ic{ transform:scale(.88) rotate(0deg); }
+  .subject-tile .nm{ font-family:'Sora'; font-size:9.5px; font-weight:800; color:var(--ink); margin:0; line-height:1.25; transition:color .2s ease; }
+  .subject-tile .cnt{ font-size:8px; color:var(--ink-soft); margin:0; }
+  .subject-tile.active{ border-color:var(--tile-a, var(--navy-700)); border-width:1.5px; background:linear-gradient(180deg, rgba(10,19,56,.05), rgba(10,19,56,0)); }
+  .subject-tile.active .nm{ color:var(--tile-a, var(--ink)); }
+
   /* ---------- WhatsApp inquiry modal ---------- */
   .modal-overlay{
     position:absolute; inset:0; z-index:80; background:rgba(10,19,56,.55);
@@ -1528,6 +1557,20 @@
 </div>
 <script>
 (function(){
+  // DEV MODE: set to true to bring back the forced "Install App" gate for
+  // production. While false, the app always opens straight to the normal
+  // splash → home flow in the browser, even when not installed/standalone —
+  // this is just for development/testing.
+  var FORCE_INSTALL_GATE = true;
+
+  // DEV MODE: set to true to bring back the launch splash screen (logo +
+  // spinner, ~3.5s) for production. While false, it's skipped entirely so
+  // the app opens straight to the Home tab — no splash, no auth wall
+  // (there never was a forced login here; browsing has always been
+  // guest-allowed, with login only prompted when unlocking paid content or
+  // opening Account).
+  var SKIP_SPLASH_FOR_DEV = true;
+
   var installGate   = document.getElementById('installGate');
   var gateBtn        = document.getElementById('gateInstallBtn');
   var gateMessage     = document.getElementById('gateMessage');
@@ -1539,8 +1582,17 @@
     return window.matchMedia('(display-mode: standalone)').matches ||
            window.navigator.standalone === true; // iOS Safari
   }
+  function isIOS(){
+    return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+           (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS
+  }
 
   function runSplash(){
+    if (SKIP_SPLASH_FOR_DEV) {
+      // Straight to the homepage — no splash overlay, no delay.
+      splash.remove();
+      return;
+    }
     splash.classList.remove('splash-hidden');
     setTimeout(function(){
       splash.classList.add('splash-hidden');
@@ -1551,7 +1603,11 @@
   // Fires the native install prompt (download + install + add to home
   // screen). Nothing else is shown — just this one screen and this button.
   function triggerInstall(){
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+      // Nothing to fire yet — give feedback instead of a silent no-op.
+      gateMessage.textContent = 'Still preparing — if nothing happens in a few seconds, close and reopen this page, then tap Install again.';
+      return;
+    }
     var promptEvent = deferredPrompt;
     deferredPrompt = null;
     promptEvent.prompt();
@@ -1562,27 +1618,35 @@
     });
   }
 
-  if (isStandalone()) {
-    // Already installed and launched from the home screen: show the
-    // normal launch screen and go straight into the app.
+  if (isStandalone() || !FORCE_INSTALL_GATE) {
+    // Already installed and launched from the home screen — or the gate
+    // is disabled for development — show the normal launch screen and go
+    // straight into the app.
     runSplash();
   } else {
     // Not installed: block the app entirely behind the install gate.
     installGate.classList.remove('gate-hidden');
     document.documentElement.style.overflow = 'hidden';
 
-    window.addEventListener('beforeinstallprompt', function(e){
-      e.preventDefault();
-      deferredPrompt = e;
-      // If the user already tapped Install before the browser was ready
-      // to prompt, fire it immediately now instead of waiting on another tap.
-      if (installRequested) triggerInstall();
-    });
+    if (isIOS()) {
+      // Safari/iOS has no install-prompt API at all — "Add to Home Screen"
+      // can only be done manually via the Share sheet.
+      gateBtn.style.display = 'none';
+      gateMessage.textContent = 'Tap the Share icon below, then "Add to Home Screen" to install.';
+    } else {
+      window.addEventListener('beforeinstallprompt', function(e){
+        e.preventDefault();
+        deferredPrompt = e;
+        // If the user already tapped Install before the browser was ready
+        // to prompt, fire it immediately now instead of waiting on another tap.
+        if (installRequested) triggerInstall();
+      });
 
-    gateBtn.addEventListener('click', function(){
-      installRequested = true;
-      triggerInstall();
-    });
+      gateBtn.addEventListener('click', function(){
+        installRequested = true;
+        triggerInstall();
+      });
+    }
 
     window.addEventListener('appinstalled', function(){
       // Once installed, reload so the browser relaunches it in standalone
@@ -1669,7 +1733,7 @@
       <div class="section" style="padding-top:10px;">
         <div class="section-head">
           <h2>Popular this week</h2>
-          <span class="link" onclick="goTo('catalog')">See all</span>
+          <span class="link" onclick="goToPopular()">See all</span>
         </div>
       </div>
       <div class="cat-grid" id="homeFeatured"></div>
@@ -1708,15 +1772,17 @@
         </div>
       </div>
 
-      <div class="results-filters">
+      <div class="filter-select-wrap" style="margin-top:14px;">
         <select class="filter-select" id="levelClassSelect" onchange="setLevelClass(this.value)"></select>
-        <select class="filter-select" id="levelSubjectSelect" onchange="setLevelSubject(this.value)"></select>
       </div>
 
+      <div class="subject-grid" id="levelSubjectTabs" style="margin-top:12px;"></div>
       <div class="cat-grid" id="levelResultsGrid" style="margin-top:14px;"></div>
     </section>
 
-    <!-- ---------- FORMAT VIEW (independent per-material-type section) ---------- -->
+    <!-- ---------- FORMAT VIEW (independent per-material-type section — its own
+         "browse by subject" tabs scoped to just this type: Books, Summaries,
+         Library, Videos, PDF, Images each get only their own subjects here) ---------- -->
     <section class="view" id="view-format">
       <div class="section" style="padding-top:18px; padding-bottom:0;">
         <div class="results-head">
@@ -1730,7 +1796,38 @@
         </div>
       </div>
 
+      <div class="subject-grid" id="formatSubjectTabs" style="margin-top:2px;"></div>
       <div class="cat-grid" id="formatResultsGrid" style="margin-top:14px;"></div>
+    </section>
+
+    <!-- ---------- POPULAR THIS WEEK VIEW ("See all" from the home page — every
+         featured item across every subject, with its own class + subject +
+         price filters, independent of the main catalog's filters) ---------- -->
+    <section class="view" id="view-popular">
+      <div class="section" style="padding-top:18px; padding-bottom:0;">
+        <div class="results-head">
+          <button class="results-back" onclick="goTo('home')" aria-label="Back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+          </button>
+          <div>
+            <h2 class="results-title">Popular this week</h2>
+            <p class="results-subtitle" id="popularSubtitle"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-select-wrap" style="margin-top:14px;">
+        <select class="filter-select" id="popularClassSelect" onchange="setPopularClass(this.value)"></select>
+      </div>
+
+      <div class="chip-row" id="popularPriceChipRow" style="padding:12px 20px 4px;">
+        <div class="chip active" data-price="all" onclick="setPopularPrice('all')">All materials</div>
+        <div class="chip" data-price="free" onclick="setPopularPrice('free')">Free only</div>
+        <div class="chip" data-price="paid" onclick="setPopularPrice('paid')">Paid only</div>
+      </div>
+
+      <div class="subject-grid" id="popularSubjectTabs" style="margin-top:2px;"></div>
+      <div class="cat-grid" id="popularGrid" style="margin-top:14px;"></div>
     </section>
 
     <!-- ---------- PAST PAPERS VIEW (filter by examination board, then year) ---------- -->
@@ -1752,6 +1849,7 @@
         <select class="filter-select" id="pastPaperYearSelect" onchange="setPastPaperYear(this.value)"></select>
       </div>
 
+      <div class="subject-grid" id="pastPaperSubjectTabs" style="margin-top:2px;"></div>
       <div class="cat-grid" id="pastPapersGrid" style="margin-top:14px;"></div>
     </section>
 
@@ -1774,6 +1872,7 @@
         <select class="filter-select" id="latestPaperYearSelect" onchange="setLatestPaperYear(this.value)"></select>
       </div>
 
+      <div class="subject-grid" id="latestPaperSubjectTabs" style="margin-top:2px;"></div>
       <div class="cat-grid" id="latestPapersGrid" style="margin-top:14px;"></div>
     </section>
 
@@ -1797,6 +1896,7 @@
         <div class="chip" data-excel-filter="last" onclick="setExcelPaperFilter('last')">Last papers</div>
       </div>
 
+      <div class="subject-grid" id="excelPaperSubjectTabs" style="margin-top:2px;"></div>
       <div class="cat-grid" id="excelPapersGrid" style="margin-top:14px;"></div>
     </section>
 
@@ -2244,9 +2344,9 @@ const FINAL_EXAM_CLASSES = ['P.7','S.4','S.6'];
 /* Subjects offered per exam level. Edit these lists to match your real
    subject offering — everything below reads from them automatically. */
 const SUBJECTS_BY_EXAM = {
-  ple:  ['English','Mathematics','Science','Social Studies'],
-  uce:  ['Agriculture','Art and Design','Biology','Chemistry','Commerce','CRE','English','Entrepreneurship','Geography','History','ICT','IRE','Kiswahili','Literature in English','Mathematics','Physical Education','Physics'],
-  uace: ['General Paper','Mathematics','Physics','Chemistry','Biology','Economics','Geography','History'],
+  ple: ['English','Mathematics','Science','Social Science'],
+  uce: ['Agriculture','Art Papers','Biology','Chemistry','Commerce','CRE','English','Entrepreneurship','Food Nutrition','Geography','History','ICT','IRE','Kiswahili','Literature','Mathematics','Physical Education','Physics'],
+  uace: ['Agriculture','Art Papers','Biology','Chemistry','Commerce','CRE','Economics','English Literature','Entrepreneurship','Food Nutrition','General Paper','Geography','History','ICT','IRE','Kiswahili','Mathematics','Physics','Subsidiary ICT','Subsidiary Mathematics','Technical Drawing'],
 };
 function subjectsForExam(examId){
   if(examId === 'all'){
@@ -2286,6 +2386,25 @@ const ICONS = {
   pdfdoc:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><path d="M14 2v6h6"></path><path d="M12 11v6M9.5 14.5L12 17l2.5-2.5"></path></svg>',
   image:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>',
   education:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 9l10-5 10 5-10 5-10-5z"></path><path d="M6 11.5V17c0 1.1 2.7 3 6 3s6-1.9 6-3v-5.5"></path><path d="M22 9v6"></path></svg>',
+  /* Subject icons (used by the "Browse by subject" dashboard) */
+  language:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h7M7.5 4v2M4.5 6.5C5.5 9 7.5 11 10 12M8 9c1 1.8 3 3.3 5.5 4"></path><path d="M13 20l4-9 4 9M14.5 17h5"></path></svg>',
+  calculator:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="2"></rect><path d="M8 6h8M8 11h1M11.5 11h1M15 11h1M8 15h1M11.5 15h1M15 15h1M8 18.5h1M11.5 18.5h1M15 18.5h1"></path></svg>',
+  atom:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"></circle><ellipse cx="12" cy="12" rx="9" ry="3.6"></ellipse><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(60 12 12)"></ellipse><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(120 12 12)"></ellipse></svg>',
+  flask:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 2h6M10 2v6.5L4.5 19a2 2 0 001.8 3h11.4a2 2 0 001.8-3L14 8.5V2"></path><path d="M7.5 15h9"></path></svg>',
+  leaf:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 4C10 4 4 10 4 18v2h2c8 0 14-6 14-14V4z"></path><path d="M20 4C13 8 9 13 6 19"></path></svg>',
+  sprout:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22V12"></path><path d="M12 12C12 7 9 5 4 5c0 5 3 8 8 7z"></path><path d="M12 11C12 7 15 5 20 5c0 5-3 8-8 6z"></path></svg>',
+  globe:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 2.6 4 6 4 9s-1.5 6.4-4 9c-2.5-2.6-4-6-4-9s1.5-6.4 4-9z"></path></svg>',
+  scroll:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4h12v13a3 3 0 01-3 3H8a3 3 0 01-3-3V6a2 2 0 012-2z"></path><path d="M6 4a2 2 0 00-2 2v11a2 2 0 002 2M9 9h6M9 13h6"></path></svg>',
+  coins:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="9" cy="7" rx="6" ry="3"></ellipse><path d="M3 7v5c0 1.7 2.7 3 6 3s6-1.3 6-3V7"></path><path d="M3 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"></path><path d="M15 9.3c2.8.3 6 1.4 6 3.2v5c0 1.7-2.7 3-6 3-1.2 0-2.4-.2-3.3-.5"></path></svg>',
+  chip:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="7" width="10" height="10" rx="1.5"></rect><path d="M9 3v3M12 3v3M15 3v3M9 18v3M12 18v3M15 18v3M3 9h3M3 12h3M3 15h3M18 9h3M18 12h3M18 15h3"></path></svg>',
+  faith:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M6 8h12"></path><path d="M12 21c-3-3-5-6-5-9a5 5 0 0110 0c0 3-2 6-5 9z"></path></svg>',
+  bubble:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 01-11.3 7.3L4 21l1.5-4.5A8 8 0 1121 12z"></path><path d="M8 10h8M8 13h5"></path></svg>',
+  feather:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 4C10 4 4 12 4 20h2c1-3 3-5 5-6M9 15l9-9M4 20l4-2"></path></svg>',
+  palette:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 000 20c1.4 0 2-1 2-2 0-.6-.3-1-.6-1.4-.3-.4-.6-.8-.6-1.4 0-1 .8-1.7 1.8-1.7H16a4 4 0 004-4c0-5-3.6-9.5-8-9.5z"></path><circle cx="7.5" cy="10.5" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="8.5" cy="15" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="14" cy="7.5" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="17" cy="11.5" r="1.2" fill="currentColor" stroke="none"></circle></svg>',
+  briefcase:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M3 12h18"></path></svg>',
+  trophy:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3h8v6a4 4 0 01-8 0V3z"></path><path d="M8 4H5a3 3 0 003 5.5M16 4h3a3 3 0 01-3 5.5M10 15v3M14 15v3M8 21h8"></path></svg>',
+  musicnote:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l11-2v13"></path><circle cx="6.5" cy="18" r="2.5"></circle><circle cx="17.5" cy="16" r="2.5"></circle></svg>',
+  ruler:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="8" width="19" height="8" rx="1.5" transform="rotate(-15 12 12)"></rect><path d="M8.3 9.7l.8 2M11 8.9l.8 2M13.7 8.1l.8 2M16.4 7.3l.8 2"></path></svg>',
 };
 
 /* Learners' Facilitation guide — practical tips on how to use each type
@@ -2988,9 +3107,17 @@ let state = {
   cartTab: 'cart', // 'cart' | 'favorites' | 'purchases'
   pastPaperBoard: 'all',
   pastPaperYear: 'all',
+  pastPaperSubject: 'all',
   latestPaperBoard: 'all',
   latestPaperYear: 'all',
+  latestPaperSubject: 'all',
   excelPaperFilter: 'all', // 'all' | 'latest' | 'last'
+  excelPaperSubject: 'all',
+  formatType: null,
+  formatSubject: 'all',
+  popularClass: 'all',
+  popularSubject: 'all',
+  popularPrice: 'all', // 'all' | 'free' | 'paid'
 };
 
 // A paid item (isFree === false) is locked for an account until *that
@@ -3260,6 +3387,64 @@ function renderTypeDashboard(){
   }).join('');
 }
 
+/* Dashboard of 16 subjects. Rather than a standalone "Browse by subject"
+   section, this is now nested inside each "Browse by type" destination —
+   Books, Summaries, Library, Videos, PDF, Images, Past Papers, Latest
+   Papers, and Excel Papers each get their own subject tabs, built from
+   only the subjects actually present among that type's items. */
+const SUBJECT_DASHBOARD = [
+  { id:'English',                name:'English',      text:'Eng.',       grad:['#16215C','#3A4EA8'] },
+  { id:'Mathematics',            name:'Maths',        icon:'calculator', grad:['#7A1FA2','#B15FE0'] },
+  { id:'Science',                name:'Science',      icon:'bulb',       grad:['#0E7A5F','#2FBE8F'] },
+  { id:'Physics',                name:'Physics',      icon:'atom',       grad:['#1D5FA3','#4BB4E6'] },
+  { id:'Chemistry',               name:'Chemistry',    icon:'flask',      grad:['#A3201C','#E3A730'] },
+  { id:'Biology',                name:'Biology',      icon:'leaf',       grad:['#0E7A5F','#5FCB9E'] },
+  { id:'Agriculture',            name:'Agriculture',  icon:'sprout',     grad:['#3B6B1E','#7FBE4A'] },
+  { id:'Geography',              name:'Geography',    icon:'globe',      grad:['#0E4A6E','#2FA8C9'] },
+  { id:'History',                name:'History',      icon:'scroll',     grad:['#7A4A12','#D99A3D'] },
+  { id:'Commerce',               name:'Commerce',     icon:'coins',      grad:['#8A5A0E','#F2CE72'] },
+  { id:'Economics',              name:'Economics',    icon:'coins',      grad:['#5B3B96','#9067D6'] },
+  { id:'ICT',                    name:'ICT',          icon:'chip',       grad:['#16215C','#4B5EC9'] },
+  { id:'CRE',                    name:'CRE',          icon:'faith',      grad:['#B3241F','#EA5A4B'] },
+  { id:'IRE',                    name:'IRE',          icon:'faith',      grad:['#0E4A6E','#4BB4E6'] },
+  { id:'Kiswahili',              name:'Kiswahili',    icon:'bubble',     grad:['#7A1FA2','#C77EE8'] },
+  { id:'Literature',             name:'Literature',   icon:'feather',    grad:['#5B3B96','#8A6FD6'] },
+  { id:'Social Science',         name:'Soc. Science', icon:'group',      grad:['#0E4A6E','#3A8FBF'] },
+  { id:'Art Papers',             name:'Art Papers',   icon:'palette',    grad:['#B3241F','#E88A6E'] },
+  { id:'Entrepreneurship',       name:'Entrep.',      icon:'briefcase',  grad:['#7A4A12','#C77E3D'] },
+  { id:'Physical Education',     name:'P.E.',         icon:'trophy',     grad:['#0E7A5F','#3ADB9E'] },
+  { id:'General Paper',          name:'Gen. Paper',   icon:'question',   grad:['#5B3B96','#7A5CC9'] },
+  { id:'French',                 name:'French',       text:'Fr.',        grad:['#1D5FA3','#5FA8E6'] },
+  { id:'Music',                  name:'Music',        icon:'musicnote',  grad:['#8A5A0E','#E0A94F'] },
+  { id:'Technical Drawing',      name:'Tech. Drawing',icon:'ruler',      grad:['#16215C','#5B6EC9'] },
+  { id:'Food Nutrition',         name:'Food & Nutr.', icon:'leaf',       grad:['#2F7A3E','#7FBE6A'] },
+  { id:'English Literature',     name:'Eng. Lit.',    icon:'feather',    grad:['#3B2570','#7A5CC9'] },
+  { id:'Subsidiary ICT',         name:'Sub. ICT',     icon:'chip',       grad:['#16215C','#6C7ED9'] },
+  { id:'Subsidiary Mathematics', name:'Sub. Maths',   icon:'calculator', grad:['#5B1F8A','#B15FE0'] },
+];
+
+/* Builds the HTML for a row of subject tabs scoped to `items` (only
+   subjects actually present get a tab, plus a leading "All" tab), with
+   the currently-active one highlighted. `onclickFn` is the name of the
+   global function to call with the tapped subject id (or 'all'). */
+/* Always shows all 24 subjects for the given type, so the tabs are
+   visible immediately — even in development/before the Admin CMS has
+   published any items for that type yet. Each tile shows how many of
+   the passed-in `items` match it, so subjects with 0 items are still
+   visible (just show "0") rather than disappearing entirely. Subjects
+   with a `text` badge (e.g. English → "Eng.") render that instead of
+   an icon svg. */
+function subjectTabsHTML(items, activeId, onclickFn){
+  const counts = {};
+  items.forEach(it => (it.subjects||[]).forEach(s => { counts[s] = (counts[s]||0) + 1; }));
+  return SUBJECT_DASHBOARD.map((s, i) => `
+    <div class="subject-tile${activeId===s.id ? ' active' : ''}" style="--tile-a:${s.grad[0]}; --tile-b:${s.grad[1]}; animation-delay:${i*30}ms;" onclick="${onclickFn}('${s.id.replace(/'/g,"\\'")}')">
+      <div class="ic">${s.text ? `<span class="txt">${s.text}</span>` : iconSvg(s.icon)}</div>
+      <p class="nm">${s.name}</p>
+      <p class="cnt">${counts[s.id] || 0}</p>
+    </div>`).join('');
+}
+
 /* ---------- Latest Papers (browse by examination board, then year —
    mirrors Past Papers now that latest papers also carry examBoard/examYear) ---------- */
 function latestPaperBoards(){
@@ -3281,6 +3466,7 @@ function latestPaperYears(board){
 function goToLatestPapers(){
   state.latestPaperBoard = 'all';
   state.latestPaperYear = 'all';
+  state.latestPaperSubject = 'all';
   renderLatestPaperFilters();
   renderLatestPapersResults();
   goTo('latestpapers');
@@ -3304,17 +3490,22 @@ function renderLatestPaperFilters(){
 }
 
 function renderLatestPapersResults(){
-  const items = CATALOG.filter(c =>
+  const boardYearItems = CATALOG.filter(c =>
     c.isLatestPaper &&
     (state.latestPaperBoard === 'all' || (c.examBoard||'').trim().toLowerCase() === state.latestPaperBoard.toLowerCase()) &&
     (state.latestPaperYear === 'all' || c.examYear === Number(state.latestPaperYear))
   );
+  const items = state.latestPaperSubject === 'all'
+    ? boardYearItems
+    : boardYearItems.filter(c => (c.subjects||[]).includes(state.latestPaperSubject));
+
   document.getElementById('latestPapersSubtitle').textContent = `${items.length} item${items.length===1?'':'s'}`;
+  document.getElementById('latestPaperSubjectTabs').innerHTML = subjectTabsHTML(boardYearItems, state.latestPaperSubject, 'setLatestPaperSubject');
   document.getElementById('latestPapersGrid').innerHTML = items.length
     ? items.map(item => cardHTML(item)).join('')
     : `<div class="empty-state">
         <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
-        <h3>No latest papers found</h3><p>Try a different board or year.</p>
+        <h3>No latest papers found</h3><p>Try a different board, year, or subject.</p>
       </div>`;
 }
 
@@ -3332,6 +3523,12 @@ function setLatestPaperYear(year){
   if(window.ExcelBackend) window.ExcelBackend.logEvent('latest_papers_year', year);
 }
 
+function setLatestPaperSubject(subj){
+  state.latestPaperSubject = (state.latestPaperSubject === subj) ? 'all' : subj; // tap again to clear
+  renderLatestPapersResults();
+  if(window.ExcelBackend) window.ExcelBackend.logEvent('latest_papers_subject', subj);
+}
+
 /* A past paper counts as an "Excel Paper" when its examination board is our
    own company, "Excel" (case/spacing-insensitive) — no separate flag needed. */
 function isExcelPaper(item){
@@ -3339,17 +3536,101 @@ function isExcelPaper(item){
 }
 
 function filterByFormat(type){
+  state.formatType = type;
+  state.formatSubject = 'all';
+  renderFormatView();
+  goTo('format');
+}
+
+function setFormatSubject(subj){
+  state.formatSubject = (state.formatSubject === subj) ? 'all' : subj; // tap again to clear
+  renderFormatView();
+  if(window.ExcelBackend) window.ExcelBackend.logEvent('format_subject', state.formatType + ':' + subj);
+}
+
+/* ---------- Popular this week (home "See all") — every featured item
+   across every subject, with its own class / subject / price filters.
+   Independent of the main catalog's filter state. ---------- */
+function goToPopular(){
+  state.popularClass = 'all';
+  state.popularSubject = 'all';
+  state.popularPrice = 'all';
+  renderPopularFilters();
+  renderPopularView();
+  goTo('popular');
+  if(window.ExcelBackend) window.ExcelBackend.logEvent('popular', 'open');
+}
+
+function renderPopularFilters(){
+  const classes = [{id:'all', name:'All classes'}, ...ALL_CLASSES.map(c=>({id:c, name:c}))];
+  const sel = document.getElementById('popularClassSelect');
+  sel.innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  sel.value = state.popularClass;
+}
+
+function setPopularClass(cls){
+  state.popularClass = cls;
+  renderPopularView();
+  if(cls !== 'all' && window.ExcelBackend) window.ExcelBackend.logEvent('popular_class', cls);
+}
+
+function setPopularSubject(subj){
+  state.popularSubject = (state.popularSubject === subj) ? 'all' : subj; // tap again to clear
+  renderPopularView();
+  if(window.ExcelBackend) window.ExcelBackend.logEvent('popular_subject', subj);
+}
+
+function setPopularPrice(val){
+  state.popularPrice = val;
+  document.querySelectorAll('#popularPriceChipRow .chip').forEach(c => c.classList.toggle('active', c.dataset.price === val));
+  renderPopularView();
+  if(window.ExcelBackend) window.ExcelBackend.logEvent('popular_price', val);
+}
+
+function renderPopularView(){
+  const featured = CATALOG.filter(c => c.isFeatured);
+
+  // Scoped by class + price (but not yet subject) — this is what feeds the
+  // subject tabs, so their counts reflect the other active filters.
+  const scoped = featured.filter(item => {
+    const classMatch = state.popularClass === 'all' || item.classes.includes(state.popularClass);
+    const priceMatch = state.popularPrice === 'all' || (state.popularPrice === 'free' ? !!item.isFree : !item.isFree);
+    return classMatch && priceMatch;
+  });
+
+  const items = state.popularSubject === 'all'
+    ? scoped
+    : scoped.filter(c => (c.subjects||[]).includes(state.popularSubject));
+
+  document.getElementById('popularSubtitle').textContent =
+    `${items.length} item${items.length===1?'':'s'}` + (state.popularSubject==='all' ? ' · all subjects' : ' · ' + state.popularSubject);
+  document.getElementById('popularSubjectTabs').innerHTML = subjectTabsHTML(scoped, state.popularSubject, 'setPopularSubject');
+  document.getElementById('popularGrid').innerHTML = items.length
+    ? items.map(item => cardHTML(item)).join('')
+    : `<div class="empty-state">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
+        <h3>No materials found</h3><p>Try a different class, subject, or price filter.</p>
+      </div>`;
+}
+
+function renderFormatView(){
+  const type = state.formatType;
   const t = TYPE_DASHBOARD.find(x => x.id === type);
-  const items = CATALOG.filter(c => (c.formats||[]).includes(type));
+  const allItems = CATALOG.filter(c => (c.formats||[]).includes(type));
+  const items = state.formatSubject === 'all'
+    ? allItems
+    : allItems.filter(c => (c.subjects||[]).includes(state.formatSubject));
+
   document.getElementById('formatTitle').textContent = t ? t.name : type;
-  document.getElementById('formatSubtitle').textContent = `${items.length} item${items.length===1?'':'s'} · all levels & subjects`;
+  document.getElementById('formatSubtitle').textContent =
+    `${items.length} item${items.length===1?'':'s'}` + (state.formatSubject==='all' ? ' · all subjects' : ' · ' + state.formatSubject);
+  document.getElementById('formatSubjectTabs').innerHTML = subjectTabsHTML(allItems, state.formatSubject, 'setFormatSubject');
   document.getElementById('formatResultsGrid').innerHTML = items.length
     ? items.map(item => cardHTML(item)).join('')
     : `<div class="empty-state">
         <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
         <h3>No materials yet</h3><p>Nothing in this format yet — check back soon.</p>
       </div>`;
-  goTo('format');
 }
 
 /* Which catalog items are actually available for the current exam-level
@@ -3772,21 +4053,36 @@ function renderLevelFilters(){
   const classSel = document.getElementById('levelClassSelect');
   classSel.innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
   classSel.value = state.levelClass;
+}
 
-  const scopedSubjects = subjectsForExam(examId);
-  const subjects = [{id:'all', name:'All subjects'}, ...scopedSubjects.map(s=>({id:s, name:s}))];
-  const subjSel = document.getElementById('levelSubjectSelect');
-  subjSel.innerHTML = subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-  subjSel.value = state.levelSubject;
+/* Subject tabs scoped to just this exam level's own subject list (in that
+   level's own order) — unlike subjectTabsHTML (used elsewhere) which always
+   shows all subjects across every level, this only ever shows PLE's 4
+   subjects on the PLE screen, UCE's 19 on the UCE screen, etc. */
+function levelSubjectTabsHTML(items, activeId, examId){
+  const counts = {};
+  items.forEach(it => (it.subjects||[]).forEach(s => { counts[s] = (counts[s]||0) + 1; }));
+  const scopedIds = subjectsForExam(examId);
+  return scopedIds.map((id, i) => {
+    const s = SUBJECT_DASHBOARD.find(d => d.id === id) || { id, name:id, icon:'book', grad:['#16215C','#3A4EA8'] };
+    return `
+    <div class="subject-tile${activeId===s.id ? ' active' : ''}" style="--tile-a:${s.grad[0]}; --tile-b:${s.grad[1]}; animation-delay:${i*30}ms;" onclick="setLevelSubject('${s.id.replace(/'/g,"\\'")}')">
+      <div class="ic">${s.text ? `<span class="txt">${s.text}</span>` : iconSvg(s.icon)}</div>
+      <p class="nm">${s.name}</p>
+      <p class="cnt">${counts[s.id] || 0}</p>
+    </div>`;
+  }).join('');
 }
 
 function renderLevelResults(){
   const examId = state.levelExam;
   const scopedClasses = state.levelClass !== 'all' ? [state.levelClass] : classesForExam(examId);
-  const items = CATALOG.filter(item =>
-    item.classes.some(c => scopedClasses.includes(c)) &&
-    (state.levelSubject === 'all' || item.subjects.includes(state.levelSubject))
-  );
+  const classItems = CATALOG.filter(item => item.classes.some(c => scopedClasses.includes(c)));
+  const items = state.levelSubject === 'all'
+    ? classItems
+    : classItems.filter(item => item.subjects.includes(state.levelSubject));
+
+  document.getElementById('levelSubjectTabs').innerHTML = levelSubjectTabsHTML(classItems, state.levelSubject, examId);
   document.getElementById('levelResultsGrid').innerHTML = items.length
     ? items.map(item => cardHTML(item)).join('')
     : `<div class="empty-state">
@@ -3802,9 +4098,9 @@ function setLevelClass(cls){
 }
 
 function setLevelSubject(subj){
-  state.levelSubject = subj;
+  state.levelSubject = (state.levelSubject === subj) ? 'all' : subj; // tap again to clear
   renderLevelResults();
-  if(subj !== 'all' && window.ExcelBackend) window.ExcelBackend.logEvent('subject', subj);
+  if(window.ExcelBackend) window.ExcelBackend.logEvent('subject', subj);
 }
 
 /* ---------- Past Papers (browse by examination board, then year) ---------- */
@@ -3827,6 +4123,7 @@ function pastPaperYears(board){
 function goToPastPapers(){
   state.pastPaperBoard = 'all';
   state.pastPaperYear = 'all';
+  state.pastPaperSubject = 'all';
   renderPastPaperFilters();
   renderPastPapersResults();
   goTo('pastpapers');
@@ -3850,17 +4147,22 @@ function renderPastPaperFilters(){
 }
 
 function renderPastPapersResults(){
-  const items = CATALOG.filter(c =>
+  const boardYearItems = CATALOG.filter(c =>
     c.isPastPaper &&
     (state.pastPaperBoard === 'all' || (c.examBoard||'').trim().toLowerCase() === state.pastPaperBoard.toLowerCase()) &&
     (state.pastPaperYear === 'all' || c.examYear === Number(state.pastPaperYear))
   );
+  const items = state.pastPaperSubject === 'all'
+    ? boardYearItems
+    : boardYearItems.filter(c => (c.subjects||[]).includes(state.pastPaperSubject));
+
   document.getElementById('pastPapersSubtitle').textContent = `${items.length} item${items.length===1?'':'s'}`;
+  document.getElementById('pastPaperSubjectTabs').innerHTML = subjectTabsHTML(boardYearItems, state.pastPaperSubject, 'setPastPaperSubject');
   document.getElementById('pastPapersGrid').innerHTML = items.length
     ? items.map(item => cardHTML(item)).join('')
     : `<div class="empty-state">
         <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
-        <h3>No past papers found</h3><p>Try a different board or year.</p>
+        <h3>No past papers found</h3><p>Try a different board, year, or subject.</p>
       </div>`;
 }
 
@@ -3878,9 +4180,16 @@ function setPastPaperYear(year){
   if(window.ExcelBackend) window.ExcelBackend.logEvent('past_papers_year', year);
 }
 
+function setPastPaperSubject(subj){
+  state.pastPaperSubject = (state.pastPaperSubject === subj) ? 'all' : subj; // tap again to clear
+  renderPastPapersResults();
+  if(window.ExcelBackend) window.ExcelBackend.logEvent('past_papers_subject', subj);
+}
+
 /* ---------- Excel Papers (our own company only — Latest / Last papers) ---------- */
 function goToExcelPapers(){
   state.excelPaperFilter = 'all';
+  state.excelPaperSubject = 'all';
   document.querySelectorAll('#excelPaperChipRow .chip').forEach(c => c.classList.toggle('active', c.dataset.excelFilter === 'all'));
   renderExcelPapersResults();
   goTo('excelpapers');
@@ -3891,10 +4200,15 @@ function renderExcelPapersResults(){
   const excelItems = CATALOG.filter(isExcelPaper);
   const latestYear = excelItems.reduce((max, c) => Math.max(max, c.examYear || 0), 0);
 
-  let items = excelItems;
-  if(state.excelPaperFilter === 'latest') items = excelItems.filter(c => c.examYear === latestYear);
-  if(state.excelPaperFilter === 'last') items = excelItems.filter(c => c.examYear !== latestYear);
+  let filterItems = excelItems;
+  if(state.excelPaperFilter === 'latest') filterItems = excelItems.filter(c => c.examYear === latestYear);
+  if(state.excelPaperFilter === 'last') filterItems = excelItems.filter(c => c.examYear !== latestYear);
 
+  const items = state.excelPaperSubject === 'all'
+    ? filterItems
+    : filterItems.filter(c => (c.subjects||[]).includes(state.excelPaperSubject));
+
+  document.getElementById('excelPaperSubjectTabs').innerHTML = subjectTabsHTML(filterItems, state.excelPaperSubject, 'setExcelPaperSubject');
   document.getElementById('excelPapersGrid').innerHTML = items.length
     ? items.map(item => cardHTML(item)).join('')
     : `<div class="empty-state">
@@ -3905,9 +4219,16 @@ function renderExcelPapersResults(){
 
 function setExcelPaperFilter(val){
   state.excelPaperFilter = val;
+  state.excelPaperSubject = 'all';
   document.querySelectorAll('#excelPaperChipRow .chip').forEach(c => c.classList.toggle('active', c.dataset.excelFilter === val));
   renderExcelPapersResults();
   if(window.ExcelBackend) window.ExcelBackend.logEvent('excel_papers_filter', val);
+}
+
+function setExcelPaperSubject(subj){
+  state.excelPaperSubject = (state.excelPaperSubject === subj) ? 'all' : subj; // tap again to clear
+  renderExcelPapersResults();
+  if(window.ExcelBackend) window.ExcelBackend.logEvent('excel_papers_subject', subj);
 }
 
 function onSearch(val){
